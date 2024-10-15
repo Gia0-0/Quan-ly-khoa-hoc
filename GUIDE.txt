@@ -1,0 +1,36 @@
+Hướng dẫn sử dụng project API Website học online
+
+Công nghệ sử dụng trong dự án:
+- Back-end: PHP ^8.1 | Composer ^2.6.1 | LARAVEL ^10.10 | MySQL 8.0
+- Cloud: Microsoft Azure + Firebase + Google Cloud
+
+Cài đặt dự án:
+(Yêu cầu: Cài đặt Xampp hoặc Laragon hoặc WampServer)
+1. Clone dự án từ link: https://github.com/luxeko/72dctt21_thiet_ke_phan_mem_be.git
+2. Sau khi clone thành công mở terminal trong thư mục dự án rồi chạy các câu lệnh sau:
+	- composer install (cài đặt các package trong file composer.json)
+	- composer update (update các package)
+	- composer dump-autoload
+	- cp .env.example .env (tạo file .env)
+3. Tạo Database: Thông tin DB có trong file .env - Lưu ý có thể sửa DB_PORT, DB_USERNAME, DB_PASSWORD trong .env theo cấu hình của từng máy
+4. Sau khi tạo xong Database chạy các câu lệnh sau:
+	- php artisan migrate (Tạo bảng cho DB)
+	- php artisan jwt:secret (Khởi tạo key mã hóa bảo mật)
+	- php artisan serve (chạy dự án)
+
+5. Test API thông qua app POSTMAN
+6.1. Với Private API:
+    - B1: Cần có tài khoản user để truy cập         => chạy API 127.0.0.1/api/v1/auth/register (POST)
+    - B2: Chạy API đăng nhập để lấy ra access-token => 127.0.0.1/api/v1/auth/login (POST)
+    - B3: Copy token trong data trả                 => Mở Postman
+                                                    => Chọn Authorization ở gần Body
+                                                    => Ở mục Type chọn Bearer Token
+                                                    => Ở phần Token paste vào token vừa copy
+                                                    => chạy các API trong Private API bình thường
+                                                    * Lưu ý: access-token chỉ có hạn 1h = 60 phút.
+                                                    Thế nên sau 1h phải call API refresh-token.
+                                                    Có thể tùy chỉnh tăng thêm thời gian ở mục JWT_TTL trong file .env
+
+6.2. Với Public API dùng bình thường ko cần đăng nhập
+7. Chạy cron-job: php artisan schedule:work
+
