@@ -92,10 +92,11 @@ Route::group(["prefix" => "v1"], function () {
             });
 
             Route::controller(CourseController::class)->group(function () {
-                Route::apiResource("courses", CourseController::class)->names([
-                    "show" => "courses.getDetail",
-                    "index" => "getAll",
-                ])->except("store");
+                // Route::apiResource(name: "courses", CourseController::class)->names([
+                //     "show" => "courses.getDetail",
+                //     "index" => "getAll",
+                // ])->except("store");
+                Route::get("courses", "index");
                 Route::post("courses/create", "store")->name("courses.create");
                 Route::delete("courses/delete/{id}", "destroy")->name("courses.delete");
             });

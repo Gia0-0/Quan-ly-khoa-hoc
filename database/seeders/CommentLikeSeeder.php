@@ -2,17 +2,18 @@
 
 namespace Database\Seeders;
 
-use App\Models\CourseInfo;
+use App\Models\Comment;
+use App\Models\CommentLike;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
-class CourseInfoSeeder extends Seeder
+class CommentLikeSeeder extends Seeder
 {
     /**
      * Run the database seeds.
      */
     public function run(): void
     {
-        CourseInfo::factory(50)->create();
+        CommentLike::factory(50)->create();
     }
 }

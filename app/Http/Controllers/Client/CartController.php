@@ -34,7 +34,12 @@ class CartController extends Controller
         if ($validator->fails()) {
             return $this->responseError(trans($validator->errors()->first()), 200);
         }
-        $carts = auth('api')->user()->cart()->with('course')->orderBy('created_at', 'desc')->paginate($params['page_size'], ['*'], 'page', $params['page_index']);
+
+        // Sử dụng toán tử ?? để cung cấp giá trị mặc định nếu key không tồn tại
+        $pageSize = $params['page_size'] ?? 10; // Mặc định 10 nếu không có 'page_size'
+        $pageIndex = $params['page_index'] ?? 1; // Mặc định 1 nếu không có 'page_index'
+
+        $carts = auth('api')->user()->cart()->with('course')->orderBy('created_at', 'desc')->paginate($pageSize, ['*'], 'page', $pageIndex);
 
         return $this->responseSuccessWithData([
             'carts' => $carts->items(),

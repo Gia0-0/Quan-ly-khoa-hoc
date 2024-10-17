@@ -25,7 +25,7 @@ class CourseController extends Controller
     private UserDetail $userDetail;
     private Lesson $lesson;
 
-    public function __construct(Course $course, Category $category, Chapter $chapter, UserDetail $userDetail, Lesson $lesson, protected NotificationRepository $notificationRepository)
+    public function __construct(Course $course, Category $category, Chapter $chapter, UserDetail $userDetail, Lesson $lesson)
     {
         $this->course = $course;
         $this->category = $category;
@@ -36,7 +36,7 @@ class CourseController extends Controller
     public function index(Request $request): JsonResponse
     {
         $query = $request->all();
-
+    
         $validator = Validator::make($query, [
             'page_size' => 'nullable|integer',
             'page_index' => 'nullable|integer',
@@ -44,118 +44,78 @@ class CourseController extends Controller
             'user_id' => 'nullable|array',
             'user_id.*' => 'nullable|integer|exists:users,id',
             'category_id' => 'nullable|integer|exists:categories,id',
-            'level' => [
-                'nullable',
-                'array'
-            ],
-            'level.*' => [
-                'nullable',
-                'string',
-                Rule::in(['beginner', 'intermediate', 'expert', 'all'])
-            ],
-            'status' => [
-                'nullable',
-                'array'
-            ],
-            'status.*' => [
-                'nullable',
-                'string',
-                Rule::in(['disable', 'available', 'upcoming'])
-            ],
+            'level' => ['nullable', 'array'],
+            'level.*' => ['nullable', 'string', Rule::in(['beginner', 'intermediate', 'expert', 'all'])],
+            'status' => ['nullable', 'array'],
+            'status.*' => ['nullable', 'string', Rule::in(['disable', 'available', 'upcoming'])],
             'price_from' => 'nullable|decimal:0|min:0',
             'price_to' => 'nullable|decimal:0|min:0',
         ]);
-
+    
         if ($validator->fails()) {
             return $this->responseError(trans($validator->errors()->first()), 400);
         }
-
-        $queryBuilder = $this->course->with(['chapters.lessons', 'courseInfo', 'userCourses.userDetail:*', 'category.children:*'])->select('*')
+    
+        $queryBuilder = $this->course->with(['chapters.lessons', 'courseInfo', 'userCourses.userDetail:*', 'category.children:*'])
+            ->select('*')
             ->selectRaw('(SELECT COUNT(*) FROM chapters WHERE chapters.course_id = courses.id) AS course_count')
             ->selectRaw('(SELECT COUNT(*) AS lesson_count FROM lessons WHERE lessons.chapter_id IN (SELECT id FROM chapters WHERE chapters.course_id = courses.id)) AS lesson_count')
             ->selectRaw('(SELECT COUNT(*) AS video_count FROM lessons WHERE lessons.type = "video" AND lessons.chapter_id IN (SELECT id FROM chapters WHERE chapters.course_id = courses.id)) AS video_count')
             ->selectRaw('(SELECT COUNT(*) AS text_count FROM lessons WHERE lessons.type = "text" AND lessons.chapter_id IN (SELECT id FROM chapters WHERE chapters.course_id = courses.id)) AS text_count');
-        $courses = $queryBuilder->get();
-        $pageSize = $query['page_size'] ?? 12;
-        $pageIndex = $query['page_index'] ?? 1;
-        $coursesPaginated = $queryBuilder->paginate($pageSize, ['*'], 'page', $pageIndex);
-
-        // Lặp qua từng khóa học đã phân trang trong collection
-        $coursesPaginated->getCollection()->transform(function ($course) {
-            $totalCourseDuration = 0;
-
-            foreach ($course->chapters as $chapter) {
-                $totalChapterDuration = 0;
-
-                foreach ($chapter->lessons as $lesson) {
-                    $totalChapterDuration += $lesson->duration;
-                }
-
-                $chapter->totalDuration = $totalChapterDuration;
-                $totalCourseDuration += $totalChapterDuration;
-            }
-
-            $course->totalDuration = $totalCourseDuration;
-
-            return $course;
-        });
+    
+        // Apply filters to the query builder
         if (isset($query['search'])) {
-            $courses = $courses->whereRaw("CONCAT(`course_name`) LIKE '%" . $query['search'] . "%'");
+            $queryBuilder->whereRaw("CONCAT(`course_name`) LIKE ?", ['%' . $query['search'] . '%']);
         }
-
+    
         if (isset($query['status'])) {
-            $courses = $courses->whereIn('status', $query['status']);
+            $queryBuilder->whereIn('status', $query['status']);
         }
+    
         if (isset($query['level'])) {
-            $courses = $courses->whereIn('level', $query['level']);
+            $queryBuilder->whereIn('level', $query['level']);
         }
-
+    
         if (!empty($query['user_id'])) {
-            $courses = $courses->whereIn('user_id', $query['user_id']);
+            $queryBuilder->whereIn('user_id', $query['user_id']);
         }
-
+    
         if (isset($query['category_id'])) {
             $categoryId = $query['category_id'];
             $category = $this->category->find($categoryId);
-
+    
             if ($category && $category->parent_id == 0) {
                 $categories = $this->category->with('children')->where('parent_id', $categoryId)->get();
-                // Danh sách id khóa học con
                 $categoryIdsChild = $categories->pluck('id')->toArray();
-                $courses = $this->course->whereIn('category_id', $categoryIdsChild);
+                $queryBuilder->whereIn('category_id', $categoryIdsChild);
             } else {
-                $courses = $this->course->where('category_id', $categoryId);
+                $queryBuilder->where('category_id', $categoryId);
             }
         }
-
+    
         if (isset($query['price_from']) && isset($query['price_to'])) {
-            $courses = $courses->whereRaw("price >= " . $query["price_from"] . " and price <= " . $query["price_to"]);
+            $queryBuilder->whereBetween('price', [$query['price_from'], $query['price_to']]);
         }
-
+    
+        // Handle pagination
         $pageSize = $query['page_size'] ?? 12;
         $pageIndex = $query['page_index'] ?? 1;
-        $coursesTest = $courses->paginate($pageSize, ['*'], 'page', $pageIndex);
-        $coursesTest->getCollection()->transform(function ($course) {
-            $totalCourseDuration = 0;
-
-            foreach ($course->chapters as $chapter) {
-                $totalChapterDuration = 0;
-
-                foreach ($chapter->lessons as $lesson) {
-                    $totalChapterDuration += $lesson->duration;
-                }
-
-                $chapter->totalDuration = $totalChapterDuration;
-                $totalCourseDuration += $totalChapterDuration;
-            }
-
+    
+        $coursesPaginated = $queryBuilder->paginate($pageSize, ['*'], 'page', $pageIndex);
+    
+        // Calculate total durations
+        $coursesPaginated->getCollection()->transform(function ($course) {
+            $totalCourseDuration = $course->chapters->reduce(function ($carry, $chapter) {
+                return $carry + $chapter->lessons->sum('duration');
+            }, 0);
+    
             $course->totalDuration = $totalCourseDuration;
-
             return $course;
         });
-
-        return $this->responseSuccessWithData($coursesTest, 200);
+    
+        return $this->responseSuccessWithData($coursesPaginated, 200);
     }
+    
 
     public function store(Request $request): JsonResponse
     {
@@ -195,24 +155,24 @@ class CourseController extends Controller
                 'chapters.*.priority' => 'required|integer',
                 'chapters.*.chapter_title' => 'required|string',
                 'chapters.*.lessons' => 'required|array',
-                'chapters.*.lessons.*.type' => [
-                    'required',
-                    'string',
-                    Rule::in(['video', 'text'])
-                ],
-                'chapters.*.lessons.*.status' => [
-                    'required',
-                    Rule::in(0, 1)
-                ],
-                'chapters.*.lessons.*.priority' => 'required|integer',
-                'chapters.*.lessons.*.lesson_title' => 'required|string',
-                'chapters.*.lessons.*.video_url' => 'required_if:chapters.*.lessons.*.type,video|string|nullable',
-                'chapters.*.lessons.*.content' => 'required_if:chapters.*.lessons.*.type,text|string|nullable',
-                'chapters.*lessons.*.is_public' => [
-                    'required',
-                    Rule::in(0, 1)
-                ],
-                'chapters.*lessons.*.duration' => 'required|integer'
+                    'chapters.*.lessons.*.type' => [
+                        'required',
+                        'string',
+                        Rule::in(['video', 'text'])
+                    ],
+                    'chapters.*.lessons.*.status' => [
+                        'required',
+                        Rule::in(0, 1)
+                    ],
+                    'chapters.*.lessons.*.priority' => 'required|integer',
+                    'chapters.*.lessons.*.lesson_title' => 'required|string',
+                    'chapters.*.lessons.*.video_url' => 'required_if:chapters.*.lessons.*.type,video|string|nullable',
+                    'chapters.*.lessons.*.content' => 'required_if:chapters.*.lessons.*.type,text|string|nullable',
+                    'chapters.*lessons.*.is_public' => [
+                        'required',
+                        Rule::in(0, 1)
+                    ],
+                    'chapters.*lessons.*.duration' => 'required|integer'
             ]
         );
 

@@ -2,17 +2,17 @@
 
 namespace Database\Seeders;
 
-use App\Models\CourseInfo;
+use App\Models\Tag;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
-class CourseInfoSeeder extends Seeder
+class TagSeeder extends Seeder
 {
     /**
      * Run the database seeds.
      */
     public function run(): void
     {
-        CourseInfo::factory(50)->create();
+        Tag::factory(50)->create();
     }
 }
